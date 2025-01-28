@@ -1,0 +1,10 @@
+[package]
+name = "music_trainer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cpal = "0.15.3"
+egui = "0.30.0"
+hound = "3.5.1"
+itertools = "0.14.0"
