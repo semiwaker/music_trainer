@@ -1,3 +1,6 @@
+use std::collections::VecDeque;
+use std::time::Instant;
+
 use super::*;
 use cpal;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -83,6 +86,7 @@ pub fn read_samples(path: &str, config: &StreamConfig) -> (Vec<Vec<f32>>, usize)
 #[allow(unused)]
 pub enum ToPlayMsg {
   Play(usize, usize),
+  PlayNext(usize, usize),
   Stop,
 }
 
@@ -104,6 +108,7 @@ pub struct PlayData {
   pub samples: Vec<Vec<Vec<f32>>>,
   pub channels: Vec<usize>,
   pub state: PlayState,
+  pub queue: VecDeque<(usize, usize)>,
 }
 
 impl PlayData {
@@ -119,12 +124,13 @@ impl PlayData {
       samples,
       channels,
       state: PlayState::Idle,
+      queue: VecDeque::new(),
     }
   }
 }
 
 pub fn make_stream(
-  play_data: Arc<Mutex<PlayData>>,
+  mut play_data: PlayData,
   device: &Device,
   config: &StreamConfig,
 ) -> (Stream, mpsc::Sender<ToPlayMsg>, mpsc::Receiver<ToFrontMsg>) {
@@ -134,44 +140,57 @@ pub fn make_stream(
     .build_output_stream(
       &config,
       move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-        let mut pdata = play_data.lock().unwrap();
         if let Ok(msg) = to_play_recv.try_recv() {
           match msg {
             ToPlayMsg::Play(id, milisecs) => {
-              pdata.state = PlayState::Playing {
+              play_data.state = PlayState::Playing {
                 id,
                 start: time::Instant::now(),
                 milisecs,
                 pos: 0,
               };
+              play_data.queue.clear();
+            }
+            ToPlayMsg::PlayNext(id, milisecs) => {
+              play_data.queue.push_back((id, milisecs));
             }
             ToPlayMsg::Stop => {
-              pdata.state = PlayState::Idle;
+              play_data.state = PlayState::Idle;
+              play_data.queue.clear();
             }
           }
         }
-        match pdata.state {
+
+        match play_data.state {
           PlayState::Idle => {
             for d in data {
               *d = cpal::Sample::EQUILIBRIUM;
             }
           }
           PlayState::Playing {
-            id,
-            start,
-            milisecs,
-            pos,
+            mut id,
+            mut start,
+            mut milisecs,
+            mut pos,
           } => {
-            let samples = &pdata.samples[id];
-            let channels = pdata.channels[id];
+            let samples = &play_data.samples[id];
+            let channels = play_data.channels[id];
             let now = time::Instant::now();
+
+            let mut should_play = true;
             if now.duration_since(start) > time::Duration::from_millis(milisecs as u64) {
               to_front_send.send(ToFrontMsg::Finish).unwrap();
-              pdata.state = PlayState::Idle;
-              for d in data {
-                *d = cpal::Sample::EQUILIBRIUM;
+              if let Some((next_id, next_milisecs)) = play_data.queue.pop_front() {
+                id = next_id;
+                start = Instant::now();
+                milisecs = next_milisecs;
+                pos = 0;
+              } else {
+                should_play = false;
               }
-            } else {
+            }
+
+            if should_play {
               let n = data.len();
               for i in 0..n / channels {
                 for j in 0..channels {
@@ -179,12 +198,17 @@ pub fn make_stream(
                     samples.get(pos + i).unwrap_or(&samples.last().unwrap())[j];
                 }
               }
-              pdata.state = PlayState::Playing {
+              play_data.state = PlayState::Playing {
                 id,
                 start,
                 milisecs,
                 pos: pos + n / channels,
               };
+            } else {
+              play_data.state = PlayState::Idle;
+              for d in data {
+                *d = cpal::Sample::EQUILIBRIUM;
+              }
             }
           }
         }
