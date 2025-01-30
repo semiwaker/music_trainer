@@ -1,6 +1,6 @@
 # Music Trainer
 
-A simple application to help training distinguish tones.
+A simple application to help musical training.
 
 ## Run
 
