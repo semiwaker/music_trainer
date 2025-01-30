@@ -50,6 +50,11 @@ enum AppState {
   PlayAny { playing: bool, id: usize },
   Distinguish2(DistinguishIntervalState),
   Distinguish3(DistinguishIntervalState),
+  Distinguish45(DistinguishIntervalState),
+  Distinguish6(DistinguishIntervalState),
+  Distinguish7(DistinguishIntervalState),
+  Distinguish8(DistinguishIntervalState),
+  DistinguishAll(DistinguishIntervalState),
 }
 
 #[derive(Clone, Default)]
@@ -58,6 +63,20 @@ struct DistinguishIntervalState {
   wrong: usize,
   id: Option<(usize, usize, usize)>,
   last: Option<(bool, usize, usize, usize)>,
+  dir: Direction,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+enum Direction {
+  Up,
+  Down,
+  Rand,
+}
+
+impl Default for Direction {
+  fn default() -> Self {
+    Self::Up
+  }
 }
 
 impl eframe::App for MyApp {
@@ -85,6 +104,41 @@ impl eframe::App for MyApp {
           self.state = AppState::Distinguish3(DistinguishIntervalState::default());
           ui.close_menu();
         }
+        if ui
+          .button(RichText::new("Distinguish 4 & 5").size(16.0))
+          .clicked()
+        {
+          self.state = AppState::Distinguish45(DistinguishIntervalState::default());
+          ui.close_menu();
+        }
+        if ui
+          .button(RichText::new("Distinguish 6").size(16.0))
+          .clicked()
+        {
+          self.state = AppState::Distinguish6(DistinguishIntervalState::default());
+          ui.close_menu();
+        }
+        if ui
+          .button(RichText::new("Distinguish 7").size(16.0))
+          .clicked()
+        {
+          self.state = AppState::Distinguish7(DistinguishIntervalState::default());
+          ui.close_menu();
+        }
+        if ui
+          .button(RichText::new("Distinguish 8").size(16.0))
+          .clicked()
+        {
+          self.state = AppState::Distinguish8(DistinguishIntervalState::default());
+          ui.close_menu();
+        }
+        if ui
+          .button(RichText::new("Distinguish All").size(16.0))
+          .clicked()
+        {
+          self.state = AppState::DistinguishAll(DistinguishIntervalState::default());
+          ui.close_menu();
+        }
       });
 
       ui.separator();
@@ -96,6 +150,24 @@ impl eframe::App for MyApp {
         AppState::Distinguish3(ref state) => {
           self.distinguish_interval_ui(ui, state.clone(), &[3, 4], "Distinguish Interval 3")
         }
+        AppState::Distinguish45(ref state) => {
+          self.distinguish_interval_ui(ui, state.clone(), &[5, 6, 7], "Distinguish Interval 4 & 5")
+        }
+        AppState::Distinguish6(ref state) => {
+          self.distinguish_interval_ui(ui, state.clone(), &[8, 9], "Distinguish Interval 6")
+        }
+        AppState::Distinguish7(ref state) => {
+          self.distinguish_interval_ui(ui, state.clone(), &[10, 11], "Distinguish Interval 7")
+        }
+        AppState::Distinguish8(ref state) => {
+          self.distinguish_interval_ui(ui, state.clone(), &[0, 12], "Distinguish Interval 8")
+        }
+        AppState::DistinguishAll(ref state) => self.distinguish_interval_ui(
+          ui,
+          state.clone(),
+          &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+          "Distinguish All Intervals",
+        ),
       }
     });
   }
@@ -197,6 +269,25 @@ impl MyApp {
     ui.separator();
 
     ui.horizontal(|ui| {
+      ui.radio_value(
+        &mut state.dir,
+        Direction::Up,
+        RichText::new("Up").size(20.0),
+      );
+      ui.radio_value(
+        &mut state.dir,
+        Direction::Down,
+        RichText::new("Down").size(20.0),
+      );
+      ui.radio_value(
+        &mut state.dir,
+        Direction::Rand,
+        RichText::new("Rand").size(20.0),
+      );
+    });
+    ui.separator();
+
+    ui.horizontal(|ui| {
       let mut should_play = false;
       if state.id.is_some() {
         if ui.button(RichText::new("Replay").size(20.0)).clicked() {
@@ -207,10 +298,16 @@ impl MyApp {
           should_play = true;
           let interval = choices[self.rng.random_range(0..choices.len())];
           let x = self.rng.random_range(0..(NAMES.len() - interval));
-          if self.rng.random_bool(0.5) {
-            state.id = Some((interval, x, x + interval))
-          } else {
-            state.id = Some((interval, x + interval, x))
+          match state.dir {
+            Direction::Up => state.id = Some((interval, x, x + interval)),
+            Direction::Down => state.id = Some((interval, x + interval, x)),
+            Direction::Rand => {
+              if self.rng.random_bool(0.5) {
+                state.id = Some((interval, x, x + interval))
+              } else {
+                state.id = Some((interval, x + interval, x))
+              }
+            }
           }
         }
       }
@@ -274,6 +371,11 @@ impl MyApp {
     match self.state {
       AppState::Distinguish2(_) => self.state = AppState::Distinguish2(state),
       AppState::Distinguish3(_) => self.state = AppState::Distinguish3(state),
+      AppState::Distinguish45(_) => self.state = AppState::Distinguish45(state),
+      AppState::Distinguish6(_) => self.state = AppState::Distinguish6(state),
+      AppState::Distinguish7(_) => self.state = AppState::Distinguish7(state),
+      AppState::Distinguish8(_) => self.state = AppState::Distinguish8(state),
+      AppState::DistinguishAll(_) => self.state = AppState::DistinguishAll(state),
       _ => panic!(),
     }
   }

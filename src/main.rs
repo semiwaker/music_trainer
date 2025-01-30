@@ -5,10 +5,7 @@ use ui::*;
 mod data;
 use data::*;
 
-use std::sync::{
-  atomic::{AtomicBool, Ordering},
-  mpsc, Arc, Condvar, Mutex,
-};
+use std::sync::mpsc;
 use std::time;
 
 fn main() {
