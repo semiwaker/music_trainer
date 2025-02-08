@@ -1,5 +1,5 @@
+use eframe;
 use eframe::egui;
-use eframe::{self, App};
 use egui::RichText;
 use egui_extras;
 use env_logger;
@@ -48,13 +48,13 @@ struct MyApp {
 
 enum AppState {
   PlayAny { playing: bool, id: usize },
-  Distinguish2(DistinguishIntervalState),
-  Distinguish3(DistinguishIntervalState),
-  Distinguish45(DistinguishIntervalState),
-  Distinguish6(DistinguishIntervalState),
-  Distinguish7(DistinguishIntervalState),
-  Distinguish8(DistinguishIntervalState),
-  DistinguishAll(DistinguishIntervalState),
+  DistinguishInt(DistinguishIntervalState),
+  // Distinguish3(DistinguishIntervalState),
+  // Distinguish45(DistinguishIntervalState),
+  // Distinguish6(DistinguishIntervalState),
+  // Distinguish7(DistinguishIntervalState),
+  // Distinguish8(DistinguishIntervalState),
+  // DistinguishAll(DistinguishIntervalState),
 }
 
 #[derive(Clone, Default)]
@@ -64,6 +64,7 @@ struct DistinguishIntervalState {
   id: Option<(usize, usize, usize)>,
   last: Option<(bool, usize, usize, usize)>,
   dir: Direction,
+  ticked: Vec<bool>,
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -91,52 +92,17 @@ impl eframe::App for MyApp {
           ui.close_menu();
         }
         if ui
-          .button(RichText::new("Distinguish 2").size(16.0))
+          .button(RichText::new("Distinguish Intervals").size(16.0))
           .clicked()
         {
-          self.state = AppState::Distinguish2(DistinguishIntervalState::default());
-          ui.close_menu();
-        }
-        if ui
-          .button(RichText::new("Distinguish 3").size(16.0))
-          .clicked()
-        {
-          self.state = AppState::Distinguish3(DistinguishIntervalState::default());
-          ui.close_menu();
-        }
-        if ui
-          .button(RichText::new("Distinguish 4 & 5").size(16.0))
-          .clicked()
-        {
-          self.state = AppState::Distinguish45(DistinguishIntervalState::default());
-          ui.close_menu();
-        }
-        if ui
-          .button(RichText::new("Distinguish 6").size(16.0))
-          .clicked()
-        {
-          self.state = AppState::Distinguish6(DistinguishIntervalState::default());
-          ui.close_menu();
-        }
-        if ui
-          .button(RichText::new("Distinguish 7").size(16.0))
-          .clicked()
-        {
-          self.state = AppState::Distinguish7(DistinguishIntervalState::default());
-          ui.close_menu();
-        }
-        if ui
-          .button(RichText::new("Distinguish 8").size(16.0))
-          .clicked()
-        {
-          self.state = AppState::Distinguish8(DistinguishIntervalState::default());
-          ui.close_menu();
-        }
-        if ui
-          .button(RichText::new("Distinguish All").size(16.0))
-          .clicked()
-        {
-          self.state = AppState::DistinguishAll(DistinguishIntervalState::default());
+          self.state = AppState::DistinguishInt(DistinguishIntervalState {
+            correct: 0,
+            wrong: 0,
+            id: None,
+            last: None,
+            dir: Direction::Up,
+            ticked: vec![true; 13],
+          });
           ui.close_menu();
         }
       });
@@ -144,29 +110,11 @@ impl eframe::App for MyApp {
       ui.separator();
       match self.state {
         AppState::PlayAny { playing, id } => self.play_any_ui(ui, playing, id),
-        AppState::Distinguish2(ref state) => {
-          self.distinguish_interval_ui(ui, state.clone(), &[1, 2], "Distinguish Interval 2")
-        }
-        AppState::Distinguish3(ref state) => {
-          self.distinguish_interval_ui(ui, state.clone(), &[3, 4], "Distinguish Interval 3")
-        }
-        AppState::Distinguish45(ref state) => {
-          self.distinguish_interval_ui(ui, state.clone(), &[5, 6, 7], "Distinguish Interval 4 & 5")
-        }
-        AppState::Distinguish6(ref state) => {
-          self.distinguish_interval_ui(ui, state.clone(), &[8, 9], "Distinguish Interval 6")
-        }
-        AppState::Distinguish7(ref state) => {
-          self.distinguish_interval_ui(ui, state.clone(), &[10, 11], "Distinguish Interval 7")
-        }
-        AppState::Distinguish8(ref state) => {
-          self.distinguish_interval_ui(ui, state.clone(), &[0, 12], "Distinguish Interval 8")
-        }
-        AppState::DistinguishAll(ref state) => self.distinguish_interval_ui(
+        AppState::DistinguishInt(ref state) => self.distinguish_interval_ui(
           ui,
           state.clone(),
           &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-          "Distinguish All Intervals",
+          "Distinguish Intervals",
         ),
       }
     });
@@ -288,15 +236,30 @@ impl MyApp {
     ui.separator();
 
     ui.horizontal(|ui| {
+      for &i in choices {
+        ui.toggle_value(
+          state.ticked.get_mut(i).unwrap(),
+          RichText::new(interval_name(i)).size(20.0),
+        );
+      }
+    });
+    ui.separator();
+
+    ui.horizontal(|ui| {
       let mut should_play = false;
       if state.id.is_some() {
         if ui.button(RichText::new("Replay").size(20.0)).clicked() {
           should_play = true;
         }
-      } else {
+      } else if state.ticked.iter().any(|&x| x) {
         if ui.button(RichText::new("Next").size(20.0)).clicked() {
           should_play = true;
-          let interval = choices[self.rng.random_range(0..choices.len())];
+          let available: Vec<usize> = choices
+            .iter()
+            .zip(&state.ticked)
+            .filter_map(|(&c, &t)| if t { Some(c) } else { None })
+            .collect();
+          let interval = available[self.rng.random_range(0..available.len())];
           let x = self.rng.random_range(0..(NAMES.len() - interval));
           match state.dir {
             Direction::Up => state.id = Some((interval, x, x + interval)),
@@ -310,6 +273,11 @@ impl MyApp {
             }
           }
         }
+      } else {
+        ui.add_enabled(
+          false,
+          egui::widgets::Button::new(RichText::new("Next").size(20.0)),
+        );
       }
 
       if should_play {
@@ -330,8 +298,10 @@ impl MyApp {
       if let Some((x, a, b)) = &state.id {
         let mut select = None;
         for (i, b) in choices.iter().zip(buttons) {
-          if ui.add(b).clicked() {
-            select = Some(*i);
+          if state.ticked[*i] {
+            if ui.add(b).clicked() {
+              select = Some(*i);
+            }
           }
         }
         if let Some(y) = select {
@@ -345,8 +315,10 @@ impl MyApp {
           state.id = None;
         }
       } else {
-        for b in buttons {
-          ui.add_enabled(false, b);
+        for (i, b) in buttons.into_iter().enumerate() {
+          if state.ticked[i] {
+            ui.add_enabled(false, b);
+          }
         }
       }
     });
@@ -369,13 +341,7 @@ impl MyApp {
     }
 
     match self.state {
-      AppState::Distinguish2(_) => self.state = AppState::Distinguish2(state),
-      AppState::Distinguish3(_) => self.state = AppState::Distinguish3(state),
-      AppState::Distinguish45(_) => self.state = AppState::Distinguish45(state),
-      AppState::Distinguish6(_) => self.state = AppState::Distinguish6(state),
-      AppState::Distinguish7(_) => self.state = AppState::Distinguish7(state),
-      AppState::Distinguish8(_) => self.state = AppState::Distinguish8(state),
-      AppState::DistinguishAll(_) => self.state = AppState::DistinguishAll(state),
+      AppState::DistinguishInt(_) => self.state = AppState::DistinguishInt(state),
       _ => panic!(),
     }
   }
