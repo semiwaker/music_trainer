@@ -64,6 +64,7 @@ struct DistinguishIntervalState {
   id: Option<(usize, usize, usize)>,
   last: Option<(bool, usize, usize, usize)>,
   dir: Direction,
+  fixed: Option<usize>,
   ticked: Vec<bool>,
 }
 
@@ -101,6 +102,7 @@ impl eframe::App for MyApp {
             id: None,
             last: None,
             dir: Direction::Up,
+            fixed: None,
             ticked: vec![true; 13],
           });
           ui.close_menu();
@@ -184,6 +186,12 @@ impl MyApp {
   ) {
     if let Ok(_) = self.to_front_recv.try_recv() {}
 
+    let available: Vec<usize> = choices
+      .iter()
+      .zip(&state.ticked)
+      .filter_map(|(&c, &t)| if t { Some(c) } else { None })
+      .collect();
+
     ui.heading(RichText::new(name).size(25.0));
 
     egui::Grid::new("grid").show(ui, |ui| {
@@ -217,6 +225,7 @@ impl MyApp {
     ui.separator();
 
     ui.horizontal(|ui| {
+      let last_dir = state.dir.clone();
       ui.radio_value(
         &mut state.dir,
         Direction::Up,
@@ -232,6 +241,42 @@ impl MyApp {
         Direction::Rand,
         RichText::new("Rand").size(20.0),
       );
+      if state.dir != last_dir {
+        state.fixed = None;
+      }
+      ui.add_space(50.0);
+
+      if !available.is_empty() {
+        let cmax = *available.iter().max().unwrap();
+        egui::ComboBox::from_label(RichText::new("Fix tone").size(20.0))
+          .selected_text(
+            RichText::new(format!(
+              "{}",
+              if let Some(f) = state.fixed {
+                NAMES[f]
+              } else {
+                "None"
+              }
+            ))
+            .size(20.0),
+          )
+          .show_ui(ui, |ui| {
+            ui.selectable_value(&mut state.fixed, None, RichText::new("None").size(18.0));
+            for i in (if state.dir != Direction::Up { cmax } else { 0 })
+              ..(if state.dir != Direction::Down {
+                NAMES.len() - cmax
+              } else {
+                NAMES.len()
+              })
+            {
+              ui.selectable_value(
+                &mut state.fixed,
+                Some(i),
+                RichText::new(NAMES[i]).size(18.0),
+              );
+            }
+          });
+      }
     });
     ui.separator();
 
@@ -254,13 +299,12 @@ impl MyApp {
       } else if state.ticked.iter().any(|&x| x) {
         if ui.button(RichText::new("Next").size(20.0)).clicked() {
           should_play = true;
-          let available: Vec<usize> = choices
-            .iter()
-            .zip(&state.ticked)
-            .filter_map(|(&c, &t)| if t { Some(c) } else { None })
-            .collect();
           let interval = available[self.rng.random_range(0..available.len())];
-          let x = self.rng.random_range(0..(NAMES.len() - interval));
+          let x = if let Some(f) = state.fixed {
+            f
+          } else {
+            self.rng.random_range(0..(NAMES.len() - interval))
+          };
           match state.dir {
             Direction::Up => state.id = Some((interval, x, x + interval)),
             Direction::Down => state.id = Some((interval, x + interval, x)),
